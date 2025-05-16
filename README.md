@@ -1,6 +1,6 @@
 # Chart Project
 
-A collection of HTML/JavaScript applications for visualizing natural gas price data from NGI (Natural Gas Intelligence) API. The project includes a secure proxy server to handle API authentication and prevent exposing credentials in client-side code.
+Echarts ideas for displaying prices, other data.
 
 ## Project Structure
 
