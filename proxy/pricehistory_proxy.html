@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Query Results</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 5px;
+            text-align: left;
+        }
+        #percentChangeContainer {
+            margin-bottom: 20px;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+
+    <script>
+        // Helper function to generate all dates in a range (from your new file)
+        // Ensures dates are handled as UTC to avoid timezone issues with date boundaries
+        function getDatesInRange(startDate, endDate) {
+          const dates = [];
+          if (!startDate || !endDate) return dates; // Basic validation
+
+          // Parse dates assuming they are YYYY-MM-DD and treat them as UTC midnight
+          const current = new Date(startDate + 'T00:00:00.000Z');
+          const end = new Date(endDate + 'T00:00:00.000Z');
+
+          // Check for invalid dates after parsing
+          if (isNaN(current.getTime()) || isNaN(end.getTime())) return dates;
+
+          while (current <= end) {
+            dates.push(new Date(current)); // Store the date object
+            current.setUTCDate(current.getUTCDate() + 1);
+          }
+          return dates;
+        }
+
+        function updateLocations() {
+            var region = document.getElementById('region').value;
+            var locationSelect = document.getElementById('location');
+            locationSelect.innerHTML = '';
+
+            var locations = {
+                'Favorites': [ { name: 'National Avg.', value: 'USAVG' }, { name: 'Henry Hub', value: 'SLAHH' }, { name: 'Waha', value: 'WTXWAHA' } ],
+                'South Texas': [ { name: 'Agua Dulce', value: 'STXAGUAD' }, { name: 'Florida Gas Zone 1', value: 'STXFGTZ1' }, { name: 'NGPL S. TX', value: 'STXNGPL' }, { name: 'Tennessee Zone 0 South', value: 'STXTENN' }, { name: 'Texas Eastern S. TX', value: 'STXTETCO' }, { name: 'Transco Zone 1', value: 'STXST30' }, { name: 'Tres Palacios', value: 'STX3PAL' }, { name: 'S. TX Regional Avg.', value: 'STXRAVG' } ],
+                'East Texas': [ { name: 'Atmos Zone 3', value: 'ETXATMOSZ3' }, { name: 'Carthage', value: 'ETXCARTH' }, { name: 'Golden Triangle Storage', value: 'ETXGLDTRI' }, { name: 'Houston Ship Channel', value: 'ETXHSHIP' }, { name: 'Katy', value: 'ETXKATY' }, { name: 'Moss Bluff', value: 'ETXMBSF' }, { name: 'NGPL TexOk', value: 'ETXNGPL' }, { name: 'Tennessee Zone 0 North', value: 'ETXTENN' }, { name: 'Texas Eastern E. TX', value: 'ETXTETCO' }, { name: 'Tolar Hub', value: 'OTHTOLAR' }, { name: 'Transco Zone 2', value: 'ETXST45' }, { name: 'E. TX Regional Avg.', value: 'ETXRAVG' } ],
+                'West Texas': [ { name: 'El Paso Permian', value: 'WTXEPP' }, { name: 'El Paso - Keystone Pool', value: 'WTXEPKEY' }, { name: 'El Paso - Plains Pool', value: 'WTXEPPL' }, { name: 'El Paso - Waha Pool', value: 'WTXEPWAHA' }, { name: 'Northern Natural Gas 1-7', value: 'WTXNNG' }, { name: 'Oneok WesTex', value: 'WTXONEOK' }, { name: 'Transwestern', value: 'WTXTW' }, { name: 'Transwestern - Central', value: 'WTXTWCENT' }, { name: 'Transwestern - W. TX', value: 'WTXTWOTH' }, { name: 'Waha', value: 'WTXWAHA' }, { name: 'W. TX/SE NM Regional Avg.', value: 'WTXRAVG' } ],
+                'Midwest': [ { name: 'Alliance', value: 'MCWALL' }, { name: 'ANR ML7', value: 'MCWML7' }, { name: 'Chicago Citygate', value: 'MCWCCITY' }, { name: 'Chicago - Nicor Gas', value: 'MCWCCNICOR' }, { name: 'Chicago - NIPSCO', value: 'MCWCCNIPS' }, { name: 'Chicago - North Shore', value: 'MCWCCNSHOR' }, { name: 'Chicago - Peoples', value: 'MCWCCPEOP' }, { name: 'Consumers Energy', value: 'MCWCONS' }, { name: 'Dawn', value: 'MCWDAWN' }, { name: 'Defiance', value: 'MCWDEFIANCE' }, { name: 'Rover-ANR', value: 'MCWROVANR' }, { name: 'Rover-Panhandle', value: 'MCWROVPEPL' }, { name: 'Emerson', value: 'MCWEMER' }, { name: 'Joliet', value: 'MCWJOL' }, { name: 'Lebanon', value: 'NEALEB' }, { name: 'Michigan Consolidated', value: 'MCWMCON' }, { name: 'NGPL Amarillo Mainline', value: 'MCWNGPLAM' }, { name: 'NGPL Iowa-Illinois', value: 'MCWNGPLIOI' }, { name: 'NGPL MidAmerican', value: 'MCWNGPLMIDAM' }, { name: 'Parkway/Union', value: 'MCWPARKWAY' }, { name: 'REX Zone 3 Delivered', value: 'OTHREXZN3DEL' }, { name: 'REX into ANR - Shelby', value: 'MCWREXANR' }, { name: 'REX into MGT - Edgar', value: 'MCWREXMGT' }, { name: 'REX into NGPL - Moultrie', value: 'MCWREXNGPL' }, { name: 'REX into PEPL - Putnam', value: 'MCWREXPEPL' }, { name: 'REX into Trunk - Douglas', value: 'MCWREXTRNK' }, { name: 'Midwest Regional Avg.', value: 'MWERAVG' } ],
+                'Midcontinent': [ { name: 'ANR SW', value: 'MCWANR' }, { name: 'El Paso Anadarko', value: 'MCWEPANDKO' }, { name: 'Enable East', value: 'MCWNORE' }, { name: 'NGPL Midcontinent', value: 'MCWNGPL' }, { name: 'Northern Natural Demarc', value: 'MCWDMARK' }, { name: 'OGT', value: 'MCWONG' }, { name: 'Panhandle Eastern', value: 'MCWPEPL' }, { name: 'Southern Star', value: 'MCWWILL' }, { name: 'Ventura', value: 'OTHVENTURA' }, { name: 'Northern Border Ventura', value: 'MCWNBVENT' }, { name: 'Northern Natural Ventura', value: 'MCWVENT' }, { name: 'Midcontinent Regional Avg.', value: 'MCTRAVG' } ],
+                'North Louisiana': [ { name: 'Enable South', value: 'NLACPTS' }, { name: 'NGPL Gulf Coast Mainline', value: 'NLANGPLGULFML' }, { name: 'Perryville', value: 'NLAPERRY' }, { name: 'Texas Eastern, M1, 24', value: 'ALATETM124' }, { name: 'Texas Gas Zone 1', value: 'ETXTGT' }, { name: 'Trunkline Zone 1A', value: 'OTHTRNK1A' }, { name: 'N. LA Regional Avg.', value: 'NLARAVG' } ],
+                'South Louisiana': [ { name: 'ANR SE', value: 'SLAANRSE' }, { name: 'Bobcat Storage', value: 'STGBOBCAT' }, { name: 'Columbia Gulf Mainline', value: 'SLACGMAIN' }, { name: 'Columbia Gulf onshore', value: 'SLACGO' }, { name: 'Egan Hub', value: 'STGEGAN' }, { name: 'Florida Gas Zone 2', value: 'SLAFGTZ2' }, { name: 'Henry Hub', value: 'SLAHH' }, { name: 'Pine Prairie', value: 'SLAPPSF' }, { name: 'Southern Natural', value: 'SLASONAT' }, { name: 'Tennessee Line 500', value: 'SLAT500' }, { name: 'Tennessee Line 800', value: 'SLAT800' }, { name: 'Texas Eastern E. LA', value: 'SLATETCOE' }, { name: 'Texas Eastern W. LA', value: 'SLATETCOW' }, { name: 'Transco Zone 3 non-St. 65', value: 'SLANONST65' }, { name: 'Transco Zone 3 St. 65', value: 'SLAST65' }, { name: 'Trunkline E. LA', value: 'SLATRNKE' }, { name: 'Trunkline W. LA', value: 'SLATRNKW' }, { name: 'S. LA Regional Avg.', value: 'SLARAVG' } ],
+                'Southeast': [ { name: 'Cove Point', value: 'NEACOVE' }, { name: 'FGT Citygate', value: 'FLAFGT' }, { name: 'Florida Gas Zone 3', value: 'SLAFGTZ3' }, { name: 'Southern Pines', value: 'ALASPSF' }, { name: 'Tenn Zone 1 100L', value: 'ALATENN1L100' }, { name: 'Tenn Zone 1 non-St. 87', value: 'SETENN1OTH' }, { name: 'Tenn Zone 1 St. 87', value: 'SETENN1ST87' }, { name: 'Texas Eastern M-1, 30', value: 'ALATETM1' }, { name: 'Transco Zone 4', value: 'ALAST85' }, { name: 'Transco Zone 5', value: 'NEATRANZ5' }, { name: 'Transco Zone 5 North', value: 'NEATZ5WGL' }, { name: 'Transco Zone 5 South', value: 'NEATZ5NWGL' }, { name: 'Southeast Regional Avg.', value: 'SEREGAVG' } ],
+                'Appalachia': [ { name: 'Columbia Gas', value: 'NEATCO' }, { name: 'Eastern Gas North', value: 'NEACNGNP' }, { name: 'Eastern Gas South', value: 'NEACNG' }, { name: 'Millennium East Pool', value: 'NEAMILL' }, { name: 'Tenn Zone 4 200L', value: 'NEATENN4L200' }, { name: 'Tennessee Zn 4 313 Pool', value: 'NEATENN4313P' }, { name: 'Tennessee Zn 4 Marcellus', value: 'NEATENN4MAR' }, { name: 'Texas Eastern M-2, 30 Receipt', value: 'NEATETM2REC' }, { name: 'Texas Eastern M-3, Delivery', value: 'NEATETM3DEL' }, { name: 'Transco-Leidy Line', value: 'NEALEIDYT' }, { name: 'Appalachia Regional Avg.', value: 'APPREGAVG' } ],
+                'Northeast': [ { name: 'Algonquin Citygate', value: 'NEAALGCG' }, { name: 'Algonquin Citygate (non-G)', value: 'NEALGNG' }, { name: 'Algonquin Receipts', value: 'NEAALGIN' }, { name: 'Dracut', value: 'NEADRACUT' }, { name: 'Iroquois Zone 1', value: 'NEAIROZ1' }, { name: 'Iroquois Zone 2', value: 'NEAIRO' }, { name: 'Iroquois, Waddington', value: 'NEAIROWAD' }, { name: 'Maritimes & Northeast', value: 'NEAMNP' }, { name: 'Niagara', value: 'MCWNIAGR' }, { name: 'PNGTS', value: 'NEAPNGTS' }, { name: 'E Hereford/Pittsburg', value: 'NEAEHPITT' }, { name: 'PNGTS Non-Border', value: 'NEAPNGTSNBDR' }, { name: 'Tenn Zone 5 200L', value: 'NEATENN5L200' }, { name: 'Tenn Zone 5 200L East', value: 'NEATENNZ5E' }, { name: 'Tenn Zone 5 200L West', value: 'NEATENNZ5W' }, { name: 'Tenn Zone 6 200L', value: 'NEATENN6L200' }, { name: 'Tenn Zone 6 200L North', value: 'NEATENNZ6N' }, { name: 'Tenn Zone 6 200L South', value: 'NEATENNZ6S' }, { name: 'Transco Zone 6 non-NY', value: 'NEATZ6NNY' }, { name: 'Transco Zone 6 NY', value: 'NEATZ6NY' }, { name: 'Northeast Regional Avg.', value: 'NEARAVG' } ],
+                'Rockies': [ { name: 'Cheyenne Hub', value: 'RMTCHEY' }, { name: 'CIG', value: 'RMTCIG' }, { name: 'CIG DJ Basin', value: 'RMTCIGDJ' }, { name: 'El Paso Bondad', value: 'RMTEPBON' }, { name: 'El Paso San Juan', value: 'RMTEPSJ' }, { name: 'Kingsgate', value: 'RMTKING' }, { name: 'KRGT Rec Pool', value: 'RMTKR' }, { name: 'Northwest S. of Green River', value: 'RMTNWSGR' }, { name: 'Northwest Sumas', value: 'RMTSUMAS' }, { name: 'Northwest Wyoming Pool', value: 'RMTNWW' }, { name: 'Opal', value: 'RMTOPAL' }, { name: 'Questar', value: 'RMTQUEST' }, { name: 'Ruby - Receipts', value: 'RMTRUBYR' }, { name: 'Stanfield', value: 'RMTSTAN' }, { name: 'Transwestern San Juan', value: 'RMTTWSJ' }, { name: 'White River Hub', value: 'RMTWHITERVR' }, { name: 'Rocky Mtns. Regional Avg.', value: 'RMTRAVG' } ],
+                'Arizona/Nevada': [ { name: 'El Paso S. Mainline/N. Baja', value: 'ARNBAJAN' }, { name: 'KRGT Del Pool', value: 'ARNKERNDEL' } ],
+                'California': [ { name: 'Malin', value: 'CALM400' }, { name: 'PG&E Citygate', value: 'CALPGCG' }, { name: 'SoCal Citygate', value: 'CALSCG' }, { name: 'Southern Border, PG&E', value: 'CALSPGE' }, { name: 'SoCal Border Avg.', value: 'CALSAVG' }, { name: 'SoCal Border - Blythe', value: 'CALSAVGBLY' }, { name: 'SoCal Border - Ehrenberg', value: 'CALSAVGEH' }, { name: 'SoCal Border - Kern River Station', value: 'CALSAVGKRS' }, { name: 'SoCal Border - Kramer', value: 'CALSAVGKR' }, { name: 'SoCal Border - Needles', value: 'CALSAVGNE' }, { name: 'SoCal Border - Topock', value: 'CALSAVGTPK' }, { name: 'SoCal Border - Wheeler Ridge', value: 'CALSAVGWR' }, { name: 'California Regional Avg.', value: 'CALRAVG' }, { name: 'National Avg.', value: 'USAVG' } ],
+                'Canada': [ { name: 'Alliance (APC) - ATP', value: 'CDNCREC' }, { name: 'Empress', value: 'CDNEMP' }, { name: 'NOVA/AECO C', value: 'CDNNOVA' }, { name: 'Westcoast Station 2', value: 'CDNWST2' } ]
+            };
+
+            if (locations[region]) {
+                locations[region].forEach(function(location) {
+                    var option = document.createElement('option');
+                    option.value = location.value;
+                    option.text = location.name;
+                    locationSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Process raw proxy data into an array of objects
+        function processProxyData(proxyResponse) {
+            if (!proxyResponse || typeof proxyResponse.averages !== 'object' || proxyResponse.averages === null) {
+                return [];
+            }
+            const dataLength = Object.keys(proxyResponse.averages).length;
+            const processedData = [];
+
+            for (let i = 0; i < dataLength; i++) {
+                const avg = parseFloat(proxyResponse.averages[i]);
+                const high = parseFloat(proxyResponse.highs[i]);
+                const low = parseFloat(proxyResponse.lows[i]);
+                const vol = parseInt(proxyResponse.volumes[i]);
+                const dealCount = parseInt(proxyResponse.deals[i]);
+
+                processedData.push({
+                    pointcode: proxyResponse.pointcodes[i] || '',
+                    issue_date: proxyResponse.issue_dates[i] || '',
+                    trade_date: proxyResponse.trade_dates[i] || '',
+                    region_name: proxyResponse.region_names ? (proxyResponse.region_names[i] || '') : '',
+                    location_name: proxyResponse.location_names[i] || '',
+                    low: isNaN(low) ? null : low,
+                    high: isNaN(high) ? null : high,
+                    average: isNaN(avg) ? null : avg,
+                    volume: isNaN(vol) ? null : vol,
+                    deals: isNaN(dealCount) ? null : dealCount,
+                    flow_start_date: proxyResponse.flow_start_dates[i] || '',
+                    flow_end_date: proxyResponse.flow_end_dates[i] || ''
+                });
+            }
+            processedData.sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date));
+            return processedData;
+        }
+
+
+        function handleFormSubmit(event) {
+            event.preventDefault();
+
+            const start_date = document.getElementById('start_date').value;
+            const end_date = document.getElementById('end_date').value;
+            const location = document.getElementById('location').value;
+
+            document.getElementById('resultsContainer').innerHTML = '<p>Loading data...</p>';
+            document.getElementById('percentChangeContainer').innerHTML = '';
+
+            const apiUrl = `https://api.ngidata.com/dailyHistoricalData.json?start_date=${start_date}&end_date=${end_date}&location=${location}`;
+            const proxyUrl = `http://localhost:8081/proxy?url=${encodeURIComponent(apiUrl)}`;
+
+            fetch(proxyUrl)
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error(`Failed to retrieve data: ${response.status} - ${response.statusText}`);
+                    }
+                })
+                .then(rawProxyData => {
+                    const processedData = processProxyData(rawProxyData);
+                    populateTable(processedData);
+                    createChart(processedData);
+                    calculatePercentChange(processedData);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('resultsContainer').innerHTML =
+                        `<p>Error: ${error.message}</p>
+                         <p>Make sure the proxy server is running using: <code>python proxy_server.py</code></p>`;
+                    const chartContainer = document.getElementById('chartContainer');
+                    let existingChart = echarts.getInstanceByDom(chartContainer);
+                    if (existingChart) existingChart.clear();
+                    document.getElementById('percentChangeContainer').innerHTML = '';
+                });
+        }
+
+        function populateTable(processedData) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            if (!processedData || processedData.length === 0) {
+                resultsContainer.innerHTML = '<p>No data points found in the response.</p>';
+                return;
+            }
+
+            let tableHtml = `<table>
+                <tr>
+                    <th>Index</th><th>Point Code</th><th>Issue Date</th><th>Trade Date</th>
+                    <th>Region Name</th><th>Location Name</th><th>Low</th><th>High</th>
+                    <th>Average</th><th>Volume</th><th>Deals</th><th>Flow Start Date</th>
+                    <th>Flow End Date</th>
+                </tr>`;
+
+            processedData.forEach((row, index) => {
+                tableHtml += `<tr>
+                    <td>${index + 1}</td>
+                    <td>${row.pointcode || ''}</td>
+                    <td>${row.issue_date || ''}</td>
+                    <td>${row.trade_date || ''}</td>
+                    <td>${row.region_name || ''}</td>
+                    <td>${row.location_name || ''}</td>
+                    <td>${row.low !== null ? row.low.toFixed(3) : ''}</td>
+                    <td>${row.high !== null ? row.high.toFixed(3) : ''}</td>
+                    <td>${row.average !== null ? row.average.toFixed(3) : ''}</td>
+                    <td>${row.volume !== null ? row.volume : ''}</td>
+                    <td>${row.deals !== null ? row.deals : ''}</td>
+                    <td>${row.flow_start_date || ''}</td>
+                    <td>${row.flow_end_date || ''}</td>
+                </tr>`;
+            });
+            tableHtml += `</table>`;
+            resultsContainer.innerHTML = tableHtml;
+        }
+
+        function calculatePercentChange(processedData) {
+            const percentChangeContainer = document.getElementById('percentChangeContainer');
+            percentChangeContainer.innerHTML = '';
+
+            const averages = processedData.map(item => item.average).filter(avg => avg !== null);
+
+            if (averages.length < 2) return;
+
+            const firstPrice = averages[0];
+            const lastPrice = averages[averages.length - 1];
+
+            if (firstPrice !== 0 && !isNaN(firstPrice) && !isNaN(lastPrice)) {
+                const percentChange = ((lastPrice - firstPrice) / firstPrice) * 100;
+                percentChangeContainer.textContent = `Change: ${percentChange.toFixed(2)}%`;
+                percentChangeContainer.style.color = percentChange > 0 ? 'green' : (percentChange < 0 ? 'red' : 'black');
+            }
+        }
+
+        function createChart(processedData) {
+            const chartContainer = document.getElementById('chartContainer');
+            let chartInstance = echarts.getInstanceByDom(chartContainer);
+
+            if (!processedData || processedData.length === 0) {
+                if (chartInstance) chartInstance.clear();
+                return;
+            }
+            if (!chartInstance) {
+                chartInstance = echarts.init(chartContainer);
+            }
+
+            const tradeDates = processedData.map(item => item.trade_date);
+            const averages = processedData.map(item => item.average);
+            const highs = processedData.map(item => item.high);
+            const lows = processedData.map(item => item.low);
+
+            const options = {
+                title: { text: 'Trade Dates vs Prices' },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function (params) {
+                        let result = params[0].axisValueLabel || params[0].axisValue || ''; // Prefer axisValueLabel
+                        if (result) result += '<br/>'; // Add line break only if there's a date
+                        params.forEach(param => {
+                            if (param.value !== null && param.value !== undefined) { // Check for null/undefined
+                                result += `${echarts.format.encodeHTML(param.seriesName)}: ${param.value.toFixed(3)}<br/>`;
+                            }
+                        });
+                        return result;
+                    }
+                },
+                legend: { data: ['Average', 'High', 'Low'] }, // Updated Legend
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: tradeDates },
+                yAxis: { type: 'value', name: 'Price ($)', scale: true }, // Added scale: true
+                series: [
+                    {
+                        name: 'High', type: 'line', data: highs,
+                        lineStyle: { opacity: 0.5, type: 'dashed' }, // Color from theme
+                        symbol: 'none', connectNulls: false // Do not connect nulls
+                    },
+                    {
+                        name: 'Low', type: 'line', data: lows,
+                        lineStyle: { opacity: 0.5, type: 'dashed' }, // Color from theme
+                        symbol: 'none', connectNulls: false
+                    },
+                    {
+                        name: 'Average', type: 'line', data: averages, smooth: true,
+                        symbol: 'none',
+                        lineStyle: { color: '#5470C6', width: 2 }, // Specific style from your new code
+                        emphasis: { lineStyle: { width: 3 } },
+                        connectNulls: false
+                    }
+                ]
+            };
+            chartInstance.setOption(options, true);
+            window.removeEventListener('resize', resizeChart);
+            window.addEventListener('resize', resizeChart);
+        }
+
+        function resizeChart() {
+            const chartContainer = document.getElementById('chartContainer');
+            let chartInstance = echarts.getInstanceByDom(chartContainer);
+            if (chartInstance) chartInstance.resize();
+        }
+
+        function copyTableToClipboard() {
+            var table = document.querySelector("#resultsContainer table");
+            if (!table) { alert('No table data to copy!'); return; }
+            var text = "";
+            for (var i = 0, row; row = table.rows[i]; i++) {
+                for (var j = 0, col; col = row.cells[j]; j++) {
+                    text += col.innerText + (j < row.cells.length - 1 ? "\t" : "");
+                }
+                text += "\n";
+            }
+            navigator.clipboard.writeText(text)
+                .then(() => alert('Table Copied to Clipboard!'))
+                .catch(err => alert('Error copying text: ' + err));
+        }
+
+        // From your new file, adapted for current table structure
+        function copyPricesByDateToClipboard() {
+            try {
+                const table = document.querySelector('#resultsContainer table');
+                if (!table) throw new Error('Table not found.');
+
+                const rows = Array.from(table.querySelectorAll('tr:not(:first-child)'));
+                if (rows.length === 0) { alert('No data in table to copy.'); return; }
+
+                const tableData = rows.map(row => {
+                    const cells = Array.from(row.querySelectorAll('td'));
+                    // Expected columns: Index, Point Code, Issue Date, Trade Date, Region Name,
+                    // Location Name, Low, High, Average, Volume, Deals, Flow Start Date, Flow End Date
+                    if (cells.length < 13) return null;
+                    return {
+                        flowStartDate: cells[11].textContent.trim(),
+                        flowEndDate: cells[12].textContent.trim(),
+                        average: cells[8].textContent.trim()
+                    };
+                }).filter(row => row !== null && row.flowStartDate && row.flowEndDate && row.average);
+
+                if (!tableData.length) throw new Error('No valid data rows with flow dates and average price.');
+
+                const dateToPrice = new Map();
+                for (let i = tableData.length - 1; i >= 0; i--) {
+                    const row = tableData[i];
+                    const price = parseFloat(row.average);
+                    if (isNaN(price)) continue;
+
+                    const datesInRange = getDatesInRange(row.flowStartDate, row.flowEndDate);
+                    for (const date of datesInRange) {
+                        const dateStr = date.toISOString().split('T')[0];
+                        if (!dateToPrice.has(dateStr)) {
+                            dateToPrice.set(dateStr, price);
+                        }
+                    }
+                }
+
+                if (dateToPrice.size === 0) { alert('No prices to copy after processing.'); return; }
+
+                const sortedDates = Array.from(dateToPrice.keys()).sort();
+                const output = sortedDates.map(date =>
+                    `${date}\t${dateToPrice.get(date).toFixed(3)}`
+                ).join('\n');
+
+                navigator.clipboard.writeText(output)
+                    .then(() => alert('Prices by Flow Date Copied to Clipboard!'))
+                    .catch(err => alert('Error copying prices: ' + err.message));
+
+            } catch (error) {
+                console.error('Detailed error in copyPricesByDateToClipboard:', error);
+                alert('Error preparing prices for copy: ' + error.message);
+            }
+        }
+
+        // From your new file
+        function copyPricesByTradeDate() {
+            try {
+                const table = document.querySelector('#resultsContainer table');
+                if (!table) throw new Error('Table not found.');
+
+                const rows = Array.from(table.querySelectorAll('tr:not(:first-child)'));
+                 if (rows.length === 0) { alert('No data in table to copy.'); return; }
+
+                const output = rows.map(row => {
+                    const cells = Array.from(row.querySelectorAll('td'));
+                    // Expected columns: Index, Point Code, Issue Date, Trade Date (cell 3), ..., Average (cell 8)
+                    if (cells.length < 9) return null;
+                    const tradeDate = cells[3].textContent.trim();
+                    const priceStr = cells[8].textContent.trim();
+                    const price = parseFloat(priceStr);
+                    if (!tradeDate || isNaN(price)) return null; // Skip if no trade date or valid price
+                    return `${tradeDate}\t${price.toFixed(3)}`;
+                })
+                .filter(line => line !== null) // Remove null entries
+                .sort() // Sort by date string (YYYY-MM-DD sorts correctly)
+                .join('\n');
+
+                if (!output) { alert('No valid trade date prices to copy.'); return; }
+
+                navigator.clipboard.writeText(output)
+                    .then(() => alert('Prices by Trade Date Copied to Clipboard!'))
+                    .catch(err => alert('Error copying prices: ' + err.message));
+            } catch (error) {
+                console.error('Error copying trade date prices:', error);
+                alert('Error preparing trade date prices for copy: ' + error.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateLocations();
+        });
+    </script>
+</head>
+<body>
+    <h2>Query Parameters</h2>
+    <form onsubmit="handleFormSubmit(event)">
+        <label for="start_date">Start Date:</label>
+        <input type="date" id="start_date" name="start_date" required>
+        <br>
+        <label for="end_date">End Date:</label>
+        <input type="date" id="end_date" name="end_date" required>
+        <br>
+        <label for="region">Region:</label>
+        <select id="region" name="region" onchange="updateLocations()">
+            <option value="Favorites">Favorites</option>
+            <option value="South Texas">South Texas</option>
+            <option value="East Texas">East Texas</option>
+            <option value="West Texas">West Texas</option>
+            <option value="Midwest">Midwest</option>
+            <option value="Midcontinent">Midcontinent</option>
+            <option value="North Louisiana">North Louisiana</option>
+            <option value="South Louisiana">South Louisiana</option>
+            <option value="Southeast">Southeast</option>
+            <option value="Appalachia">Appalachia</option>
+            <option value="Northeast">Northeast</option>
+            <option value="Rockies">Rockies</option>
+            <option value="Arizona/Nevada">Arizona/Nevada</option>
+            <option value="California">California</option>
+            <option value="Canada">Canada</option>
+        </select>
+        <br>
+        <label for="location">Location:</label>
+        <select id="location" name="location"></select>
+        <br><br>
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Query Results</h2>
+    <div id="chartContainer" style="width: 600px; height: 400px;"></div>
+    <div id="percentChangeContainer"></div>
+    <button onclick="copyTableToClipboard()">Copy Full Table</button>
+    <button onclick="copyPricesByDateToClipboard()">Copy Prices by Flow Date</button>
+    <button onclick="copyPricesByTradeDate()">Copy Prices by Trade Date</button> <!-- New Button -->
+    <div id="resultsContainer">Please submit the form to view results.</div>
+    <p><strong>Note:</strong> Make sure the proxy server is running on port 8081</p>
+</body>
+</html>

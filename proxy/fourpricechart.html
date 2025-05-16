@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NGI's Daily Henry Hub Spot Price vs Prompt Futures</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.2/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #main {
+            width: 750px;
+            height: 450px;
+        }
+        #controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        input[type="number"] {
+            width: 80px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #003A50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #00506B;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="control-group">
+            <label for="minY">Min Y:</label>
+            <input type="number" id="minY" step="0.5">
+        </div>
+        <div class="control-group">
+            <label for="maxY">Max Y:</label>
+            <input type="number" id="maxY" step="0.5">
+        </div>
+        <div class="control-group">
+            <label for="interval">Interval:</label>
+            <input type="number" id="interval" step="0.5" min="0.5">
+        </div>
+        <button id="applySettings">Apply Settings</button>
+        <button id="refreshData">Refresh Data</button>
+    </div>
+    <div id="main"></div>
+
+    <script>
+        var chartDom = document.getElementById('main');
+        var myChart = echarts.init(chartDom);
+        var option;
+        let currentData = {
+            data1: null,
+            data2: null,
+            data3: null,
+            data4: null
+        };
+
+        // Add event listener for the Apply Settings button
+        document.getElementById('applySettings').addEventListener('click', function() {
+            const minY = parseFloat(document.getElementById('minY').value);
+            const maxY = parseFloat(document.getElementById('maxY').value);
+            const interval = parseFloat(document.getElementById('interval').value);
+
+            if (isNaN(minY) || isNaN(maxY) || isNaN(interval)) {
+                alert('Please enter valid numbers for all fields');
+                return;
+            }
+
+            if (minY >= maxY) {
+                alert('Min Y must be less than Max Y');
+                return;
+            }
+
+            const userSettings = {
+                minY: minY,
+                maxY: maxY,
+                interval: interval
+            };
+
+            // Update the chart with current data and new settings
+            updateChart(currentData.data1, currentData.data2, currentData.data3, currentData.data4, userSettings);
+        });
+
+        // Add event listener for the Refresh Data button
+        document.getElementById('refreshData').addEventListener('click', function() {
+            Promise.all([fetchChartData('CALSCG'), fetchChartData('WTXWAHA'), fetchChartData('SLAHH'), fetchChartData('USAVG')])
+                .then(([data1, data2, data3, data4]) => {
+                    updateChart(data1, data2, data3, data4);
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                });
+        });
+
+        function fetchChartData(location) {
+            const endDate = new Date().toISOString().split('T')[0];
+            const startDate = new Date(new Date().setDate(new Date().getDate() - 350)).toISOString().split('T')[0];
+
+            const apiUrl = `https://api.ngidata.com/dailyHistoricalData.json?start_date=${startDate}&end_date=${endDate}&location=${location}`;
+            const proxyUrl = `http://localhost:8081/proxy?url=${encodeURIComponent(apiUrl)}`;
+
+            return fetch(proxyUrl)
+                .then(response => response.json())
+                .then(data => {
+                    return {
+                        tradeDates: Object.values(data.trade_dates),
+                        averages: Object.values(data.averages).map(value => parseFloat(value))
+                    };
+                });
+        }
+
+        function updateChart(data1, data2, data3, data4, userSettings = null) {
+            // Store the current data
+            currentData = { data1, data2, data3, data4 };
+
+            const allPrices = [...data1.averages, ...data2.averages, ...data3.averages, ...data4.averages];
+            
+            let minPrice, maxPrice, interval;
+            if (userSettings) {
+                minPrice = userSettings.minY;
+                maxPrice = userSettings.maxY;
+                interval = userSettings.interval;
+            } else {
+                minPrice = Math.floor(Math.min(...allPrices) * 2) / 2;
+                maxPrice = Math.ceil(Math.max(...allPrices) * 2) / 2;
+                interval = 2.00;
+            }
+
+            // Update input fields
+            document.getElementById('minY').value = minPrice;
+            document.getElementById('maxY').value = maxPrice;
+            document.getElementById('interval').value = interval;
+
+            const monthMap = {
+                '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Jun',
+                '07': 'Jul', '08': 'Aug', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'
+            };
+
+            function reformatDate(dateStr) {
+                const [year, month, day] = dateStr.split('-');
+                return `${day}-${monthMap[month]}-${year}`;
+            }
+
+            const reformattedDates = data1.tradeDates.map(reformatDate);
+
+            option = {
+                toolbox: {
+                    show: true,
+                    feature: {
+                        saveAsImage: {
+                            type: "jpg"
+                        }
+                    }
+                },
+                textStyle: {
+                    fontFamily: 'Arial',
+                },
+                title: [
+                    {
+                        text: "NGI's SoCal Citygate, Waha, Henry Hub &",
+                        left: 'left',
+                        top: '5',
+                        textStyle: {
+                            color: '#003A50',
+                            fontWeight: 'bold',
+                            fontSize: 24
+                        }
+                    },
+                    {
+                        text: "National Avg Daily Natural Gas Prices",
+                        left: 'left',
+                        top: '35',
+                        textStyle: {
+                            color: '#003A50',
+                            fontWeight: 'bold',
+                            fontSize: 24
+                        }
+                    }
+                ],
+                graphic: [
+            {
+                type: 'image',
+                right: 30,
+                top: 25,
+                style: {
+                    image: 'data:image/png;base64,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',
+                    width: 70,
+                    height: 35
+                }
+            },
+            {
+                type: 'group',
+                left: 'center',
+                top: 70,
+                children: [
+                    {
+                        type: 'rect',
+                        z: 100,
+                        left: 'center',
+                        top: 'middle',
+                        shape: {
+                            width: 725,
+                            height: 1.0
+                        },
+                        style: {
+                            fill: '#003A50'
+                        }
+                    }
+                ]
+            },
+            {
+                type: 'image',
+                right: 10,
+                top: 10,
+                style: {
+                    image: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgdmVyc2lvbj0iMS4xIj48Y2lyY2xlIGN4PSIyNSIgY3k9IjI1IiByPSIyMCIgc3R5bGU9ImZpbGw6cmdiKDAsMTIwLDEyMCk7IHN0cm9rZTpyZ2IoMCwwLDApOyBzdHJva2Utd2lkdGg6MjsiIC8+PC9zdmc+', // The existing logo's base64 image data
+                    width: 50,
+                    height: 50
+                }
+            },
+            {
+                    type: 'text',
+                    left: '2%',
+                    bottom: '2%', // Adjusted to '2%' to bring it closer
+                    style: {
+                        text: "{bold|Source:} NGI's Daily Gas Price Index",
+                        font: '14px Arial', // This line ensures the default font size and family
+                        rich: {
+                            bold: {
+                                fontWeight: 'bold',
+                                fontSize: 14, // Ensure font size is consistent
+                                fontFamily: 'Arial' // Ensure font family is consistent
+                            }
+                        },
+                        fill: '#000'
+                    }
+                },
+
+        ],
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'cross'
+                    }
+                },
+                legend: {
+                  data: ["SoCal Citygate", "Waha", "Henry Hub", "National Avg."],
+                    top: '80',
+                    symbol: 'line',
+                    left: 'center',
+                    textStyle: {
+                        fontSize: 15, // Increase the font size here
+                        fontWeight: 500, // Optional: make the font bold
+                        color: '#333333' // Optional: set the font color
+                    }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    top: '30%',
+                    bottom: '7%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: reformattedDates,
+                    axisLabel: {
+                        rotate: 45,
+                        interval: function(index, value) {
+                            const totalDataPoints = reformattedDates.length;
+                            const displayedPoints = Math.floor(totalDataPoints / 20);
+                            const step = Math.floor(totalDataPoints / displayedPoints);
+                            return index % step === 0;
+                        },
+                        verticalAlign: 'top',
+                        align: 'right',
+                        fontSize: 13, // Adjust font size here
+                        padding: [0,0,0,0],
+                        fontWeight: 510,
+                        color: 'black'
+                      },
+                      axisLine: {
+                        lineStyle: {
+                            color: '#D3D3D3'  // Light gray for the horizontal axis line
+                        }
+                    },
+                    axisTick: {
+                        lineStyle: {
+                            color: '#D3D3D3'  // Light gray for the tick marks
+                        }
+    }
+                },
+                
+                yAxis: {
+                     type: 'value',
+                    name: '$US/MMBtu',
+                    nameLocation: 'middle',
+                    nameGap: 55,
+                    nameTextStyle: {
+                        fontWeight: 'bold',
+                        color: 'black'
+                    },
+                    min: minPrice,
+                    max: maxPrice,
+                    interval: interval,
+                      axisLine: {
+                          show: false
+                      },
+                      axisLabel: {
+                          formatter: function(value) {
+                              if (value < 0) {
+                                  return `{red|$${value.toFixed(3)}}`;
+                              } else {
+                                  return `$${value.toFixed(3)}`;
+                              }
+                          },
+                          textStyle: {
+                              fontFamily: 'Arial',
+                              fontSize: 13,
+                              color: 'black'
+                          },
+                          rich: {
+                              red: {
+                                  color: 'red',
+                                  fontFamily: 'Arial',
+                                  fontSize: 13
+                              }
+                          }
+                      }
+                  },
+
+
+                series: [
+                {
+                        name: "SoCal Citygate",
+                        type: 'line',
+                        data: data1.averages,
+                        lineStyle: {
+                            color: '#00B0F0',
+                            width: 2.5
+                        },
+                        symbol: 'line',
+                        symbolSize: 0
+                    },
+                    {
+                        name: "Waha",
+                        type: 'line',
+                        data: data2.averages,
+                        lineStyle: {
+                            color: '#002060',
+                            width: 2.5
+                        },
+                        symbol: 'line',
+                        symbolSize: 0
+                    },
+                    {
+                        name: "Henry Hub",
+                        type: 'line',
+                        data: data3.averages,
+                        lineStyle: {
+                            color: '#FFC000',
+                            width: 2.5
+                        },
+                        symbol: 'line',
+                        symbolSize: 0
+                    },
+
+                    {
+                        name: "National Avg.",
+                        type: 'line',
+                        data: data4.averages,
+                        lineStyle: {
+                            color: '#00B050',
+                            width: 2.5
+                        },
+                        symbol: 'line',
+                        symbolSize: 0
+                    }
+                ]
+            };
+
+            myChart.setOption(option);
+        }
+
+        // Initial data fetch
+        Promise.all([fetchChartData('CALSCG'), fetchChartData('WTXWAHA'), fetchChartData('SLAHH'), fetchChartData('USAVG')])
+            .then(([data1, data2, data3, data4]) => {
+                updateChart(data1, data2, data3, data4);
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+            });
+    </script>
+</body>
+</html>

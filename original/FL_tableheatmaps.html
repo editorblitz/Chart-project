@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forward Look Table Heatmaps</title>
+    <link rel="icon" type="image/png" sizes="96x96" href="https://www.naturalgasintel.com/static/favicons/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://www.naturalgasintel.com/static/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://www.naturalgasintel.com/static/favicons/favicon-16x16.png">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .form-container {
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+            padding: 8px;
+            text-align: left;
+        }
+        thead {
+            display: none;
+        }
+        canvas {
+            margin-top: 20px;
+            border: 1px solid black;
+        }
+        #tooltip {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid black;
+            padding: 5px;
+            display: none;
+            pointer-events: none;
+            z-index: 10;
+        }
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        #logContent {
+            font-family: monospace;
+            white-space: pre-wrap;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .utility-buttons {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <label for="start">Issue Start Date:</label>
+        <input type="date" id="start" name="start">
+        <label for="end">Issue End Date:</label>
+        <input type="date" id="end" name="end">
+        <br><br>
+        <button id="submit">Submit</button>
+    </div>
+
+    <!-- Modal for logs -->
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Data Processing Log</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div id="logContent"></div>
+        </div>
+    </div>
+
+    <div>
+        <h4>Notes</h4>
+        <li>The issue date is trade date + one business day (issue date comes after the trade date).</li>
+        <li>If an input date is missing or an invalid issue date, the table and heat maps will not update.</li>
+        <li>Confusion over dates, change vs. price, and fixed vs. basis is very easy so double and triple check price quotes.</li>
+        <li>The trading period is by the trade dates:</li>
+    </div>
+
+    <div id="metadataDisplay">
+        <p>Start Trade Date: <span id="startTradeDate"></span></p>
+        <p>End Trade Date: <span id="endTradeDate"></span></p>
+    </div>
+
+    <div class="utility-buttons">
+        <button id="copyTable">Copy Table to Clipboard</button>
+        <button id="showLogs">View Processing Log</button>
+    </div>
+
+    <h3>Fixed/Basis Table</h3>
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>Location</th>
+                <th id="startDateHeader"></th>
+                <th id="endDateHeader"></th>
+                <th>Week/Week Change</th>
+                <th id="startBasisHeader"></th>
+                <th id="endBasisHeader"></th>
+                <th>Week/Week Change</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Data rows will be added here dynamically -->
+        </tbody>
+    </table>
+
+    <h3>Fixed Price Heatmap</h3>
+    <canvas id="fixedHeatmapCanvas"></canvas>
+
+    <h3>Basis Price Heatmap</h3>
+    <canvas id="basisHeatmapCanvas"></canvas>
+
+    <div id="tooltip"></div>
+
+    <script>
+        const API_EMAIL = 'chris.newman@naturalgasintel.com';
+        const API_KEY = 's96IAubC3mYsYUtLmgL0RqnUQgT5js6S';
+        const BASE_URL = 'https://api.ngidata.com/';
+        let token = '';
+
+        // Custom logging system
+        const logMessages = [];
+        function customLog(message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            let logMessage = `[${timestamp}] ${message}`;
+            if (data) {
+                console.log(message, data);
+                logMessage += '\n' + JSON.stringify(data, null, 2);
+            } else {
+                console.log(message);
+            }
+            logMessages.push(logMessage);
+            updateLogModal();
+        }
+
+        function updateLogModal() {
+            const logContent = document.getElementById('logContent');
+            logContent.innerHTML = logMessages.map(msg => 
+                `<div class="log-entry">${msg}</div>`
+            ).join('');
+        }
+
+        // Modal handling
+        const modal = document.getElementById('logModal');
+        const showLogsBtn = document.getElementById('showLogs');
+        const closeBtn = document.querySelector('.close');
+
+        showLogsBtn.onclick = function() {
+            modal.style.display = 'block';
+            updateLogModal();
+        }
+
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        function clearLogs() {
+            logMessages.length = 0;
+            updateLogModal();
+        }
+
+        async function authenticate() {
+            const response = await fetch(`${BASE_URL}auth`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: API_EMAIL, password: API_KEY })
+            });
+            const data = await response.json();
+            token = data.access_token;
+        }
+
+        async function getForwardData(issueDate) {
+            const response = await fetch(`${BASE_URL}forwardDatafeed.json?issue_date=${issueDate}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            customLog(`Retrieved forward data for ${issueDate}`, data);
+            return data;
+        }
+
+        function getPromptMonth(data) {
+            // Get the first contract date from any location's data
+            const firstLocation = Object.values(data.data)[0];
+            if (!firstLocation || !firstLocation.Contracts || !firstLocation.Contracts.length) {
+                return null;
+            }
+            return firstLocation.Contracts[0];
+        }
+
+        function adjustDataForRoll(startData, endData) {
+            const startPromptMonth = getPromptMonth(startData);
+            const endPromptMonth = getPromptMonth(endData);
+            
+            customLog(`Start prompt month: ${startPromptMonth}`);
+            customLog(`End prompt month: ${endPromptMonth}`);
+
+            // If prompt months are different, we need to roll the data
+            if (startPromptMonth !== endPromptMonth) {
+                customLog('Detected month roll, adjusting data...');
+                const adjustedData = JSON.parse(JSON.stringify(startData));
+
+                // For each location, shift the prices forward by one month
+                Object.values(adjustedData.data).forEach(locationData => {
+                    if (locationData['Fixed Prices'] && locationData['Fixed Prices'].length > 1) {
+                        locationData['Fixed Prices'].shift();
+                    }
+                    if (locationData['Basis Prices'] && locationData['Basis Prices'].length > 1) {
+                        locationData['Basis Prices'].shift();
+                    }
+                    if (locationData.Contracts && locationData.Contracts.length > 1) {
+                        locationData.Contracts.shift();
+                    }
+                });
+
+                customLog('Data adjusted for month roll', adjustedData);
+                return adjustedData;
+            }
+
+            return startData;
+        }
+
+        function formatDate(dateString) {
+            const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            const date = new Date(dateString + 'T00:00:00Z');
+            const dayName = days[date.getUTCDay()];
+            return `${dateString} (${dayName})`;
+        }
+
+        function formatDateForHeader(dateString) {
+            const options = { month: '2-digit', day: '2-digit', year: 'numeric' };
+            const date = new Date(dateString + 'T00:00:00Z');
+            return date.toLocaleDateString('en-US', options);
+        }
+
+        function getContractMonth(contractDate) {
+            const [year, month] = contractDate.split('-');
+            return `${month}-${year}`;
+        }
+
+        function drawHeatmap(canvasId, data, priceData) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const cellWidth = 50;
+            const cellHeight = 30;
+            const xOffset = 150;
+            const yOffset = 30;
+
+            const rowCount = Object.keys(data).length;
+            const colCount = Object.keys(Object.values(data)[0] || {}).length;
+
+            canvas.width = xOffset + colCount * cellWidth;
+            canvas.height = yOffset + rowCount * cellHeight + 50;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const cellPositions = [];
+
+            Object.entries(data).forEach(([location, changes], rowIndex) => {
+                Object.entries(changes).forEach(([contract, change], colIndex) => {
+                    const x = xOffset + colIndex * cellWidth;
+                    const y = yOffset + rowIndex * cellHeight;
+                    const changeValue = parseFloat(change);
+                    const color = changeValue > 0 ? `rgba(0, 255, 0, ${Math.min(changeValue, 1)})` : `rgba(255, 0, 0, ${Math.min(-changeValue, 1)})`;
+
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, y, cellWidth, cellHeight);
+
+                    ctx.strokeStyle = 'black';
+                    ctx.strokeRect(x, y, cellWidth, cellHeight);
+
+                    ctx.fillStyle = 'black';
+                    ctx.fillText(changeValue.toFixed(3), x + 5, y + 20);
+
+                    cellPositions.push({
+                        x, y, width: cellWidth, height: cellHeight,
+                        location, contract, changeValue
+                    });
+                });
+
+                ctx.fillStyle = 'black';
+                ctx.fillText(location, 5, yOffset + rowIndex * cellHeight + 20);
+            });
+
+            const firstLocation = Object.keys(data)[0];
+            if (firstLocation) {
+                Object.keys(data[firstLocation]).forEach((contract, colIndex) => {
+                    const x = xOffset + colIndex * cellWidth;
+                    ctx.fillStyle = 'black';
+                    ctx.fillText(contract, x + 5, 20);
+                });
+            }
+
+            const tooltip = document.getElementById('tooltip');
+            canvas.addEventListener('mousemove', (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+
+                const cell = cellPositions.find(cell => 
+                    mouseX >= cell.x && mouseX <= cell.x + cell.width &&
+                    mouseY >= cell.y && mouseY <= cell.y + cell.height
+                );
+
+                if (cell) {
+                    const { startPrice, endPrice } = priceData[cell.location][cell.contract];
+                    tooltip.style.left = `${event.pageX + 10}px`;
+                    tooltip.style.top = `${event.pageY + 10}px`;
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = `
+                        <strong>${cell.location} - ${cell.contract}</strong><br>
+                        Start Price: ${startPrice.toFixed(3)}<br>
+                        End Price: ${endPrice.toFixed(3)}<br>
+                        Change: ${cell.changeValue}
+                    `;
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        }
+
+        async function loadData() {
+            const startDate = document.getElementById('start').value;
+            const endDate = document.getElementById('end').value;
+
+            try {
+                clearLogs();
+                customLog('Starting data retrieval...');
+                const startData = await getForwardData(startDate);
+                const endData = await getForwardData(endDate);
+
+                const adjustedStartData = adjustDataForRoll(startData, endData);
+                customLog('Adjusted start data:', adjustedStartData);
+
+                document.getElementById('startTradeDate').innerText = formatDate(adjustedStartData.meta.trade_date);
+                document.getElementById('endTradeDate').innerText = formatDate(endData.meta.trade_date);
+
+                const contractDate = Object.values(adjustedStartData.data)[0].Contracts[0];
+                const formattedContractDate = getContractMonth(contractDate);
+
+                document.getElementById('startDateHeader').innerText = `Fixed Price ${formattedContractDate} on ${formatDateForHeader(startDate)}`;
+                document.getElementById('endDateHeader').innerText = `Fixed Price ${formattedContractDate} on ${formatDateForHeader(endDate)}`;
+                document.getElementById('startBasisHeader').innerText = `Basis ${formattedContractDate} on ${formatDateForHeader(startDate)}`;
+                document.getElementById('endBasisHeader').innerText = `Basis ${formattedContractDate} on ${formatDateForHeader(endDate)}`;
+                document.querySelector('thead').style.display = 'table-header-group';
+
+                const tbody = document.getElementById('dataTable').getElementsByTagName('tbody')[0];
+                tbody.innerHTML = '';
+
+                const fixedHeatmapData = {};
+                const fixedPriceData = {};
+                const basisHeatmapData = {};
+                const basisPriceData = {};
+
+                Object.entries(adjustedStartData.data).forEach(([key, startPointData]) => {
+                    const endPointData = endData.data[key];
+                    if (startPointData && endPointData) {
+                        fixedHeatmapData[startPointData.Location] = {};
+                        fixedPriceData[startPointData.Location] = {};
+                        basisHeatmapData[startPointData.Location] = {};
+                        basisPriceData[startPointData.Location] = {};
+
+                        startPointData.Contracts.forEach((contract, idx) => {
+                            const startFixedPrice = parseFloat(startPointData['Fixed Prices'][idx]);
+                            const endFixedPrice = parseFloat(endPointData['Fixed Prices'][idx]);
+                            const fixedChangeValue = (endFixedPrice - startFixedPrice).toFixed(3);
+                            const contractMonth = getContractMonth(contract);
+
+                            fixedHeatmapData[startPointData.Location][contractMonth] = fixedChangeValue;
+                            fixedPriceData[startPointData.Location][contractMonth] = {
+                                startPrice: startFixedPrice,
+                                endPrice: endFixedPrice
+                            };
+
+                            const startBasisPrice = parseFloat(startPointData['Basis Prices'][idx]);
+                            const endBasisPrice = parseFloat(endPointData['Basis Prices'][idx]);
+                            const basisChangeValue = (endBasisPrice - startBasisPrice).toFixed(3);
+
+                            basisHeatmapData[startPointData.Location][contractMonth] = basisChangeValue;
+                            basisPriceData[startPointData.Location][contractMonth] = {
+                                startPrice: startBasisPrice,
+                                endPrice: endBasisPrice
+                            };
+                        });
+
+                        const startFixedPrice = startPointData['Fixed Prices'][0];
+                        const endFixedPrice = endPointData['Fixed Prices'][0];
+                        const fixedPriceChange = (endFixedPrice - startFixedPrice).toFixed(3);
+
+                        const startBasisPrice = startPointData['Basis Prices'][0];
+                        const endBasisPrice = endPointData['Basis Prices'][0];
+                        const basisPriceChange = (endBasisPrice - startBasisPrice).toFixed(3);
+
+                        const row = tbody.insertRow();
+                        row.insertCell(0).textContent = startPointData.Location;
+                        row.insertCell(1).textContent = startFixedPrice;
+                        row.insertCell(2).textContent = endFixedPrice;
+                        row.insertCell(3).textContent = fixedPriceChange > 0 ? `+$${fixedPriceChange}` : `-$${Math.abs(fixedPriceChange)}`;
+                        row.cells[3].style.color = fixedPriceChange > 0 ? 'green' : 'red';
+                        row.insertCell(4).textContent = startBasisPrice;
+                        row.insertCell(5).textContent = endBasisPrice;
+                        row.insertCell(6).textContent = basisPriceChange > 0 ? `+$${basisPriceChange}` : `-$${Math.abs(basisPriceChange)}`;
+                        row.cells[6].style.color = basisPriceChange > 0 ? 'green' : 'red';
+                    }
+                });
+
+                drawHeatmap('fixedHeatmapCanvas', fixedHeatmapData, fixedPriceData);
+                drawHeatmap('basisHeatmapCanvas', basisHeatmapData, basisPriceData);
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        function copyTableToClipboard() {
+            const table = document.getElementById('dataTable');
+            const header = Array.from(table.querySelectorAll('th')).map(th => th.textContent.trim());
+            const rows = Array.from(table.querySelectorAll('tbody tr')).map(row => 
+                Array.from(row.cells).map(cell => cell.textContent.trim())
+            );
+            
+            const csvContent = [header, ...rows].map(row => row.join('\t')).join('\n');
+            
+            navigator.clipboard.writeText(csvContent).then(() => {
+                alert('Table copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy table: ', err);
+                alert('Failed to copy table. Please check console for details.');
+            });
+        }
+
+        document.getElementById('copyTable').addEventListener('click', copyTableToClipboard);
+        document.getElementById('submit').addEventListener('click', loadData);
+
+        (async () => {
+            await authenticate();
+        })();
+    </script>
+</body>
+</html>

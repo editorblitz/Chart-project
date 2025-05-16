@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NGI LNG data query</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            display: none;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        #dataControls {
+            display: none;
+            margin: 20px 0;
+        }
+        #chartContainer {
+            width: 100%;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        button {
+            margin: 10px;
+            
+            cursor: pointer;
+        }
+        select {
+            
+            margin: 5px;
+        }
+    </style>
+    <script>
+        // Terminal mapping
+        const terminalMapping = {
+            'Corpus Christi': ['corpus_christi'],
+            'Freeport': ['freeport_costal_bend', 'freeport_stratton_ridge', 'freeport_tetco_big_pipeline'],
+            'Golden Pass': ['terminal_sendout'],
+            'Calcasieu Pass': ['venture_global_calcasieu_pass'],
+            'Cameron': ['cameron_cgt', 'cameron_cip'],
+            'Plaquemines': ['gxp_lp_del'],
+            'Sabine Pass': ['sabine_pass_creole', 'sabine_pass_km_la', 'sabine_pass_ngpl', 'sabine_pass_transco'],
+            'Elba Island': ['elba_island_elba_express'],
+            'Cove Point': ['cove_point']
+        };
+
+        // Store API data globally
+        let apiData = {};
+        let myChart = null;
+
+        function initChart() {
+            if (!myChart) {
+                myChart = echarts.init(document.getElementById('chartContainer'));
+            }
+        }
+
+        function updateChart(data) {
+            initChart();
+
+            const dates = data.map(item => item.Date);
+            const volumes = data.map(item => parseFloat(item['Scheduled Quantity (Dth)']));
+            const terminal = data[0]?.Terminal || 'All Terminals';
+
+            // Calculate y-axis range
+            const minValue = Math.min(...volumes);
+            const maxValue = Math.max(...volumes);
+            const range = maxValue - minValue;
+            
+            // Add padding to the range (10% below min, 10% above max)
+            const yMin = Math.max(0, minValue - range * 0.1);
+            const yMax = maxValue + range * 0.1;
+
+            const option = {
+                title: {
+                    text: `LNG Volumes - ${terminal}`,
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        const date = params[0].axisValue;
+                        const volume = params[0].value.toLocaleString();
+                        return `${date}<br/>Volume: ${volume} Dth`;
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: dates,
+                    name: 'Date',
+                    nameLocation: 'middle',
+                    nameGap: 35
+                },
+                yAxis: {
+                    type: 'value',
+                    name: 'Scheduled Quantity (Dth)',
+                    nameLocation: 'middle',
+                    nameGap: 50,
+                    min: yMin,
+                    max: yMax,
+                    axisLabel: {
+                        formatter: function(value) {
+                            return (value / 1000000).toFixed(1) + 'M';
+                        }
+                    },
+                    splitNumber: 8
+                },
+                series: [{
+                    data: volumes,
+                    type: 'line',
+                    name: 'Volume',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: {
+                        width: 3
+                    }
+                }],
+                grid: {
+                    left: '5%',
+                    right: '5%',
+                    bottom: '10%',
+                    top: '10%',
+                    containLabel: true
+                },
+                toolbox: {
+                    feature: {
+                        saveAsImage: {}
+                    }
+                },
+                dataZoom: [
+                    {
+                        type: 'inside',
+                        start: 0,
+                        end: 100
+                    },
+                    {
+                        type: 'slider',
+                        start: 0,
+                        end: 100
+                    }
+                ]
+            };
+
+            myChart.setOption(option);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (myChart) {
+                myChart.resize();
+            }
+        });
+
+        async function fetchData() {
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('dataControls').style.display = 'none';
+            
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+
+            // Debug: Show date range
+            console.log(`Fetching data from ${startDate} to ${endDate}`);
+
+            const dateList = generateDateList(new Date(startDate), new Date(endDate));
+            console.log('Date list:', dateList.map(d => d.toISOString().split('T')[0]));
+            
+            apiData = {}; // Reset stored data
+
+            try {
+                for (let date of dateList) {
+                    const formattedDate = date.toISOString().split('T')[0];
+                    // Build URL manually to avoid encoding issues
+                    const baseApiUrl = 'https://api.ngidata.com/lngFlowDatafeed.json';
+                    const apiUrlWithParams = `${baseApiUrl}?issue_date=${formattedDate}`;
+                    console.log('API URL before encoding:', apiUrlWithParams);
+                    const proxyUrl = `http://localhost:8081/proxy?url=${encodeURIComponent(apiUrlWithParams)}`;
+                    console.log('Full proxy URL:', proxyUrl);
+                    
+                    console.log(`Fetching data for date: ${formattedDate}`);
+                    const response = await fetch(proxyUrl);
+                    if (!response.ok) {
+                        console.error(`Error fetching data for ${formattedDate}: ${response.status} ${response.statusText}`);
+                        continue;
+                    }
+
+                    const data = await response.json();
+                    console.log(`Response for ${formattedDate}:`, data);
+                    
+                    // Ensure we're accessing the correct data structure
+                    if (data && data.data) {
+                        apiData[formattedDate] = data.data;
+                        console.log(`Stored data for ${formattedDate}:`, Object.keys(data.data).length, 'locations');
+                    } else if (data) {
+                        // Handle case where proxy might return data directly
+                        apiData[formattedDate] = data;
+                        console.log(`Stored direct data for ${formattedDate}:`, Object.keys(data).length, 'locations');
+                    } else {
+                        console.error(`No valid data for ${formattedDate}`);
+                        apiData[formattedDate] = {};
+                    }
+                }
+
+                document.getElementById('dataControls').style.display = 'block';
+                document.getElementById('terminal').value = 'All';
+                processAndDisplayData('All');
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('results').innerHTML = 'Error fetching data. Please try again.';
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+
+        function processAndDisplayData(selectedTerminal) {
+            const terminalLocations = selectedTerminal === 'All' ? 
+                Object.values(terminalMapping).flat() : 
+                terminalMapping[selectedTerminal] || [];
+
+            let processedData = [];
+
+            for (let [date, dateData] of Object.entries(apiData)) {
+                let dailyTotal = 0;
+
+                for (let [loc, details] of Object.entries(dateData)) {
+                    if (selectedTerminal === 'All' || terminalLocations.some(term => loc.includes(term))) {
+                        const quantity = parseFloat(details['Scheduled Quantity (Dth)']) || 0;
+                        dailyTotal += quantity;
+                    }
+                }
+
+                processedData.push({
+                    'Date': date,
+                    'Terminal': selectedTerminal,
+                    'Scheduled Quantity (Dth)': dailyTotal.toFixed(2)
+                });
+            }
+
+            // Sort by date
+            processedData.sort((a, b) => a.Date.localeCompare(b.Date));
+            
+            // Update both chart and table
+            updateChart(processedData);
+            displayResults(processedData);
+        }
+
+        function generateDateList(startDate, endDate) {
+            const dates = [];
+            let currentDate = new Date(startDate);
+            
+            while (currentDate <= endDate) {
+                dates.push(new Date(currentDate));
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            
+            return dates;
+        }
+
+        function displayResults(data) {
+            const table = document.createElement('table');
+            const headers = Object.keys(data[0]);
+            
+            // Create header row
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+            
+            // Create data rows
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.textContent = row[header];
+                    tr.appendChild(td);
+                });
+                table.appendChild(tr);
+            });
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            resultsDiv.appendChild(table);
+        }
+
+        function copyTableToClipboard() {
+            const table = document.querySelector('table');
+            if (!table) return;
+
+            let text = '';
+            const rows = table.querySelectorAll('tr');
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('th, td');
+                const rowData = Array.from(cells).map(cell => cell.textContent);
+                text += rowData.join('\t') + '\n';
+            });
+            
+            navigator.clipboard.writeText(text)
+                .then(() => alert('Table copied to clipboard!'))
+                .catch(err => console.error('Failed to copy table:', err));
+        }
+
+        function handleTerminalChange() {
+            const selectedTerminal = document.getElementById('terminal').value;
+            processAndDisplayData(selectedTerminal);
+        }
+    </script>
+</head>
+<body>
+    <h2>LNG Terminal Data Query</h2>
+    <div id="controls">
+        <div id="dateControls">
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" required>
+            
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" required>
+            
+            <button onclick="fetchData()">Fetch Data</button>
+        </div>
+        
+        <div id="dataControls">
+            <label for="terminal">Select Terminal:</label>
+            <select id="terminal" onchange="handleTerminalChange()" required>
+                <option value="All">All Terminals</option>
+                <option value="Corpus Christi">Corpus Christi</option>
+                <option value="Freeport">Freeport</option>
+                <option value="Golden Pass">Golden Pass</option>
+                <option value="Calcasieu Pass">Calcasieu Pass</option>
+                <option value="Cameron">Cameron</option>
+                <option value="Plaquemines">Plaquemines</option>
+                <option value="Sabine Pass">Sabine Pass</option>
+                <option value="Elba Island">Elba Island</option>
+                <option value="Cove Point">Cove Point</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="chartContainer"></div>
+    <div id="loader" class="loader"></div>
+    <button onclick="copyTableToClipboard()">Copy Table to Clipboard</button>
+    <div id="results"></div>
+</body>
+</html>

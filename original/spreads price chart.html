@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Query Results</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 5px;
+            text-align: left;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+
+    <script>
+        // Function to handle form submission and fetch data
+            async function handleFormSubmit(event) {
+            event.preventDefault(); // Prevent the default form submission
+
+            // Get form values
+            const start_date = document.getElementById('start_date').value;
+            const end_date = document.getElementById('end_date').value;
+            const location1 = document.getElementById('location1').value;
+            const location2 = document.getElementById('location2').value;
+
+            const location1Text = document.getElementById('location1').selectedOptions[0].text;
+            const location2Text = document.getElementById('location2').selectedOptions[0].text;
+
+            const headers = {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer NGI_EXCEL_TOKEN'
+            };
+
+            // Fetch data for the first location
+            const url1 = `https://api.ngidata.com/dailyHistoricalData.json?start_date=${start_date}&end_date=${end_date}&location=${location1}`;
+            const data1 = await fetch(url1, { method: 'GET', headers: headers }).then(response => response.json());
+
+            // Fetch data for the second location
+            const url2 = `https://api.ngidata.com/dailyHistoricalData.json?start_date=${start_date}&end_date=${end_date}&location=${location2}`;
+            const data2 = await fetch(url2, { method: 'GET', headers: headers }).then(response => response.json());
+
+            if (data1 && data2) {
+                populateTable(data1, data2, location1Text, location2Text); // Populate the table
+                createChart(data1, data2, location1Text, location2Text); // Create the chart
+            } else {
+                document.getElementById('resultsContainer').innerHTML = '<p>No data to display.</p>';
+            }
+        }
+
+
+        function updateLocations(selectId, regionId) {
+            const region = document.getElementById(regionId).value;
+            const locationSelect = document.getElementById(selectId);
+            locationSelect.innerHTML = ''; // Clear existing options
+
+            const locations = {
+                'Favorites': [
+                    { name: 'National Avg.', value: 'USAVG' },
+                    { name: 'Henry Hub', value: 'SLAHH' },
+                    { name: 'Waha', value: 'WTXWAHA' }
+                ],
+                'South Texas': [
+                    { name: 'Agua Dulce', value: 'STXAGUAD' },
+                    { name: 'Florida Gas Zone 1', value: 'STXFGTZ1' },
+                    { name: 'NGPL S. TX', value: 'STXNGPL' },
+                    { name: 'Tennessee Zone 0 South', value: 'STXTENN' },
+                    { name: 'Texas Eastern S. TX', value: 'STXTETCO' },
+                    { name: 'Transco Zone 1', value: 'STXST30' },
+                    { name: 'Tres Palacios', value: 'STX3PAL' },
+                    { name: 'S. TX Regional Avg.', value: 'STXRAVG' }
+                ],
+                'East Texas': [
+                    { name: 'Atmos Zone 3', value: 'ETXATMOSZ3' },
+                    { name: 'Carthage', value: 'ETXCARTH' },
+                    { name: 'Golden Triangle Storage', value: 'ETXGLDTRI' },
+                    { name: 'Houston Ship Channel', value: 'ETXHSHIP' },
+                    { name: 'Katy', value: 'ETXKATY' },
+                    { name: 'Moss Bluff', value: 'ETXMBSF' },
+                    { name: 'NGPL TexOk', value: 'ETXNGPL' },
+                    { name: 'Tennessee Zone 0 North', value: 'ETXTENN' },
+                    { name: 'Texas Eastern E. TX', value: 'ETXTETCO' },
+                    { name: 'Tolar Hub', value: 'OTHTOLAR' },
+                    { name: 'Transco Zone 2', value: 'ETXST45' },
+                    { name: 'E. TX Regional Avg.', value: 'ETXRAVG' }
+                ],
+                'West Texas': [
+                    { name: 'El Paso Permian', value: 'WTXEPP' },
+                    { name: 'El Paso - Keystone Pool', value: 'WTXEPKEY' },
+                    { name: 'El Paso - Plains Pool', value: 'WTXEPPL' },
+                    { name: 'El Paso - Waha Pool', value: 'WTXEPWAHA' },
+                    { name: 'Northern Natural Gas 1-7', value: 'WTXNNG' },
+                    { name: 'Oneok WesTex', value: 'WTXONEOK' },
+                    { name: 'Transwestern', value: 'WTXTW' },
+                    { name: 'Transwestern - Central', value: 'WTXTWCENT' },
+                    { name: 'Transwestern - W. TX', value: 'WTXTWOTH' },
+                    { name: 'Waha', value: 'WTXWAHA' },
+                    { name: 'W. TX/SE NM Regional Avg.', value: 'WTXRAVG' }
+                ],
+                'Midwest': [
+                    { name: 'Alliance', value: 'MCWALL' },
+                    { name: 'ANR ML7', value: 'MCWML7' },
+                    { name: 'Chicago Citygate', value: 'MCWCCITY' },
+                    { name: 'Chicago - Nicor Gas', value: 'MCWCCNICOR' },
+                    { name: 'Chicago - NIPSCO', value: 'MCWCCNIPS' },
+                    { name: 'Chicago - North Shore', value: 'MCWCCNSHOR' },
+                    { name: 'Chicago - Peoples', value: 'MCWCCPEOP' },
+                    { name: 'Consumers Energy', value: 'MCWCONS' },
+                    { name: 'Dawn', value: 'MCWDAWN' },
+                    { name: 'Defiance', value: 'MCWDEFIANCE' },
+                    { name: 'Rover-ANR', value: 'MCWROVANR' },
+                    { name: 'Rover-Panhandle', value: 'MCWROVPEPL' },
+                    { name: 'Emerson', value: 'MCWEMER' },
+                    { name: 'Joliet', value: 'MCWJOL' },
+                    { name: 'Lebanon', value: 'NEALEB' },
+                    { name: 'Michigan Consolidated', value: 'MCWMCON' },
+                    { name: 'NGPL Amarillo Mainline', value: 'MCWNGPLAM' },
+                    { name: 'NGPL Iowa-Illinois', value: 'MCWNGPLIOI' },
+                    { name: 'NGPL MidAmerican', value: 'MCWNGPLMIDAM' },
+                    { name: 'Parkway/Union', value: 'MCWPARKWAY' },
+                    { name: 'REX Zone 3 Delivered', value: 'OTHREXZN3DEL' },
+                    { name: 'REX into ANR - Shelby', value: 'MCWREXANR' },
+                    { name: 'REX into MGT - Edgar', value: 'MCWREXMGT' },
+                    { name: 'REX into NGPL - Moultrie', value: 'MCWREXNGPL' },
+                    { name: 'REX into PEPL - Putnam', value: 'MCWREXPEPL' },
+                    { name: 'REX into Trunk - Douglas', value: 'MCWREXTRNK' },
+                    { name: 'Midwest Regional Avg.', value: 'MWERAVG' }
+                ],
+                'Midcontinent': [
+                    { name: 'ANR SW', value: 'MCWANR' },
+                    { name: 'El Paso Anadarko', value: 'MCWEPANDKO' },
+                    { name: 'Enable East', value: 'MCWNORE' },
+                    { name: 'NGPL Midcontinent', value: 'MCWNGPL' },
+                    { name: 'Northern Natural Demarc', value: 'MCWDMARK' },
+                    { name: 'OGT', value: 'MCWONG' },
+                    { name: 'Panhandle Eastern', value: 'MCWPEPL' },
+                    { name: 'Southern Star', value: 'MCWWILL' },
+                    { name: 'Ventura', value: 'OTHVENTURA' },
+                    { name: 'Northern Border Ventura', value: 'MCWNBVENT' },
+                    { name: 'Northern Natural Ventura', value: 'MCWVENT' },
+                    { name: 'Midcontinent Regional Avg.', value: 'MCTRAVG' }
+                ],
+                'North Louisiana': [
+                    { name: 'Enable South', value: 'NLACPTS' },
+                    { name: 'NGPL Gulf Coast Mainline', value: 'NLANGPLGULFML' },
+                    { name: 'Perryville', value: 'NLAPERRY' },
+                    { name: 'Texas Eastern, M1, 24', value: 'ALATETM124' },
+                    { name: 'Texas Gas Zone 1', value: 'ETXTGT' },
+                    { name: 'Trunkline Zone 1A', value: 'OTHTRNK1A' },
+                    { name: 'N. LA Regional Avg.', value: 'NLARAVG' }
+                ],
+                'South Louisiana': [
+                    { name: 'ANR SE', value: 'SLAANRSE' },
+                    { name: 'Bobcat Storage', value: 'STGBOBCAT' },
+                    { name: 'Columbia Gulf Mainline', value: 'SLACGMAIN' },
+                    { name: 'Columbia Gulf onshore', value: 'SLACGO' },
+                    { name: 'Egan Hub', value: 'STGEGAN' },
+                    { name: 'Florida Gas Zone 2', value: 'SLAFGTZ2' },
+                    { name: 'Henry Hub', value: 'SLAHH' },
+                    { name: 'Pine Prairie', value: 'SLAPPSF' },
+                    { name: 'Southern Natural', value: 'SLASONAT' },
+                    { name: 'Tennessee Line 500', value: 'SLAT500' },
+                    { name: 'Tennessee Line 800', value: 'SLAT800' },
+                    { name: 'Texas Eastern E. LA', value: 'SLATETCOE' },
+                    { name: 'Texas Eastern W. LA', value: 'SLATETCOW' },
+                    { name: 'Transco Zone 3 non-St. 65', value: 'SLANONST65' },
+                    { name: 'Transco Zone 3 St. 65', value: 'SLAST65' },
+                    { name: 'Trunkline E. LA', value: 'SLATRNKE' },
+                    { name: 'Trunkline W. LA', value: 'SLATRNKW' },
+                    { name: 'S. LA Regional Avg.', value: 'SLARAVG' }
+                ],
+                'Southeast': [
+                    { name: 'Cove Point', value: 'NEACOVE' },
+                    { name: 'FGT Citygate', value: 'FLAFGT' },
+                    { name: 'Florida Gas Zone 3', value: 'SLAFGTZ3' },
+                    { name: 'Southern Pines', value: 'ALASPSF' },
+                    { name: 'Tenn Zone 1 100L', value: 'ALATENN1L100' },
+                    { name: 'Tenn Zone 1 non-St. 87', value: 'SETENN1OTH' },
+                    { name: 'Tenn Zone 1 St. 87', value: 'SETENN1ST87' },
+                    { name: 'Texas Eastern M-1, 30', value: 'ALATETM1' },
+                    { name: 'Transco Zone 4', value: 'ALAST85' },
+                    { name: 'Transco Zone 5', value: 'NEATRANZ5' },
+                    { name: 'Transco Zone 5 North', value: 'NEATZ5WGL' },
+                    { name: 'Transco Zone 5 South', value: 'NEATZ5NWGL' },
+                    { name: 'Southeast Regional Avg.', value: 'SEREGAVG' }
+                ],
+                'Appalachia': [
+                    { name: 'Columbia Gas', value: 'NEATCO' },
+                    { name: 'Eastern Gas North', value: 'NEACNGNP' },
+                    { name: 'Eastern Gas South', value: 'NEACNG' },
+                    { name: 'Millennium East Pool', value: 'NEAMILL' },
+                    { name: 'Tenn Zone 4 200L', value: 'NEATENN4L200' },
+                    { name: 'Tennessee Zn 4 313 Pool', value: 'NEATENN4313P' },
+                    { name: 'Tennessee Zn 4 Marcellus', value: 'NEATENN4MAR' },
+                    { name: 'Texas Eastern M-2, 30 Receipt', value: 'NEATETM2REC' },
+                    { name: 'Texas Eastern M-3, Delivery', value: 'NEATETM3DEL' },
+                    { name: 'Transco-Leidy Line', value: 'NEALEIDYT' },
+                    { name: 'Appalachia Regional Avg.', value: 'APPREGAVG' }
+                ],
+                'Northeast': [
+                    { name: 'Algonquin Citygate', value: 'NEAALGCG' },
+                    { name: 'Algonquin Citygate (non-G)', value: 'NEALGNG' },
+                    { name: 'Algonquin Receipts', value: 'NEAALGIN' },
+                    { name: 'Dracut', value: 'NEADRACUT' },
+                    { name: 'Iroquois Zone 1', value: 'NEAIROZ1' },
+                    { name: 'Iroquois Zone 2', value: 'NEAIRO' },
+                    { name: 'Iroquois, Waddington', value: 'NEAIROWAD' },
+                    { name: 'Maritimes & Northeast', value: 'NEAMNP' },
+                    { name: 'Niagara', value: 'MCWNIAGR' },
+                    { name: 'PNGTS', value: 'NEAPNGTS' },
+                    { name: 'E Hereford/Pittsburg', value: 'NEAEHPITT' },
+                    { name: 'PNGTS Non-Border', value: 'NEAPNGTSNBDR' },
+                    { name: 'Tenn Zone 5 200L', value: 'NEATENN5L200' },
+                    { name: 'Tenn Zone 5 200L East', value: 'NEATENNZ5E' },
+                    { name: 'Tenn Zone 5 200L West', value: 'NEATENNZ5W' },
+                    { name: 'Tenn Zone 6 200L', value: 'NEATENN6L200' },
+                    { name: 'Tenn Zone 6 200L North', value: 'NEATENNZ6N' },
+                    { name: 'Tenn Zone 6 200L South', value: 'NEATENNZ6S' },
+                    { name: 'Transco Zone 6 non-NY', value: 'NEATZ6NNY' },
+                    { name: 'Transco Zone 6 NY', value: 'NEATZ6NY' },
+                    { name: 'Northeast Regional Avg.', value: 'NEARAVG' }
+                ],
+                'Rockies': [
+                    { name: 'Cheyenne Hub', value: 'RMTCHEY' },
+                    { name: 'CIG', value: 'RMTCIG' },
+                    { name: 'CIG DJ Basin', value: 'RMTCIGDJ' },
+                    { name: 'El Paso Bondad', value: 'RMTEPBON' },
+                    { name: 'El Paso San Juan', value: 'RMTEPSJ' },
+                    { name: 'Kingsgate', value: 'RMTKING' },
+                    { name: 'KRGT Rec Pool', value: 'RMTKR' },
+                    { name: 'Northwest S. of Green River', value: 'RMTNWSGR' },
+                    { name: 'Northwest Sumas', value: 'RMTSUMAS' },
+                    { name: 'Northwest Wyoming Pool', value: 'RMTNWW' },
+                    { name: 'Opal', value: 'RMTOPAL' },
+                    { name: 'Questar', value: 'RMTQUEST' },
+                    { name: 'Ruby - Receipts', value: 'RMTRUBYR' },
+                    { name: 'Stanfield', value: 'RMTSTAN' },
+                    { name: 'Transwestern San Juan', value: 'RMTTWSJ' },
+                    { name: 'White River Hub', value: 'RMTWHITERVR' },
+                    { name: 'Rocky Mtns. Regional Avg.', value: 'RMTRAVG' }
+                ],
+                'Arizona/Nevada': [
+                    { name: 'El Paso S. Mainline/N. Baja', value: 'ARNBAJAN' },
+                    { name: 'KRGT Del Pool', value: 'ARNKERNDEL' }
+                ],
+                'California': [
+                    { name: 'Malin', value: 'CALM400' },
+                    { name: 'PG&E Citygate', value: 'CALPGCG' },
+                    { name: 'SoCal Citygate', value: 'CALSCG' },
+                    { name: 'Southern Border, PG&E', value: 'CALSPGE' },
+                    { name: 'SoCal Border Avg.', value: 'CALSAVG' },
+                    { name: 'SoCal Border - Blythe', value: 'CALSAVGBLY' },
+                    { name: 'SoCal Border - Ehrenberg', value: 'CALSAVGEH' },
+                    { name: 'SoCal Border - Kern River Station', value: 'CALSAVGKRS' },
+                    { name: 'SoCal Border - Kramer', value: 'CALSAVGKR' },
+                    { name: 'SoCal Border - Needles', value: 'CALSAVGNE' },
+                    { name: 'SoCal Border - Topock', value: 'CALSAVGTPK' },
+                    { name: 'SoCal Border - Wheeler Ridge', value: 'CALSAVGWR' },
+                    { name: 'California Regional Avg.', value: 'CALRAVG' },
+                    { name: 'National Avg.', value: 'USAVG' }
+                ],
+                'Canada': [
+                    { name: 'Alliance (APC) - ATP', value: 'CDNCREC' },
+                    { name: 'Empress', value: 'CDNEMP' },
+                    { name: 'NOVA/AECO C', value: 'CDNNOVA' },
+                    { name: 'Westcoast Station 2', value: 'CDNWST2' }
+                ]
+            };
+
+           // Add new options based on selected region
+           locations[region].forEach(function(location) {
+                const option = document.createElement('option');
+                option.value = location.value;
+                option.textContent = location.name;
+                locationSelect.appendChild(option);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateLocations('location1', 'region1');  // Initial population of locations based on default region for location1
+            updateLocations('location2', 'region2');  // Initial population of locations based on default region for location2
+        });
+
+        function populateTable(data1, data2, location1Name, location2Name) {
+    const resultsContainer = document.getElementById('resultsContainer');
+
+    // Start building the table HTML string
+    let tableHtml = `<table border="1">
+        <tr>
+            <th>Date</th>
+            <th>Spread (${location1Name} - ${location2Name})</th>
+        </tr>`;
+
+    const tradeDates = Object.values(data1.trade_dates);
+    const averages1 = Object.values(data1.averages).map(value => parseFloat(value));
+    const averages2 = Object.values(data2.averages).map(value => parseFloat(value));
+
+    const differential = averages1.map((avg, index) => (avg - averages2[index]).toFixed(3));
+
+    // Iterate over each index
+    for (let i = 0; i < tradeDates.length; i++) {
+        tableHtml += `<tr>
+            <td>${tradeDates[i]}</td>
+            <td>${differential[i]}</td>
+        </tr>`;
+    }
+
+    tableHtml += `</table>`;
+    resultsContainer.innerHTML = tableHtml;
+}
+
+
+        function createChart(data1, data2, location1, location2) {
+            const chart = echarts.init(document.getElementById('chartContainer'));
+
+            const tradeDates = Object.values(data1.trade_dates);
+            const averages1 = Object.values(data1.averages).map(value => parseFloat(value));
+            const averages2 = Object.values(data2.averages).map(value => parseFloat(value));
+
+            const differential = averages1.map((avg, index) => (avg - averages2[index]).toFixed(3));
+
+            const option = {
+                title: {
+                    text: `Spread of ${location1} to ${location2}`
+                },
+                tooltip: {
+                    trigger: 'axis'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: tradeDates
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [{
+                    data: differential,
+                    type: 'line',
+                    smooth: true
+                }]
+            };
+
+            chart.setOption(option);
+        }
+
+        function copyTableToClipboard() {
+            const table = document.querySelector("#resultsContainer table");
+            let text = "";
+            
+            if (table) {
+                for (let row of table.rows) {
+                    for (let cell of row.cells) {
+                        text += cell.innerText + "\t";
+                    }
+                    text = text.trim(); // Remove trailing tab character
+                    text += "\n";
+                }
+            }
+
+            navigator.clipboard.writeText(text).then(function() {
+                alert('Copied to clipboard!');
+            }).catch(function(error) {
+                alert('Error in copying text: ' + error);
+            });
+        }
+    </script>
+</head>
+<body>
+    <h2>Query Parameters</h2>
+    <form onsubmit="handleFormSubmit(event)">
+        <label for="start_date">Start Date:</label>
+        <input type="date" id="start_date" name="start_date" required>
+        <br>
+
+        <label for="end_date">End Date:</label>
+        <input type="date" id="end_date" name="end_date" required>
+        <br>
+
+        <label for="region1">Region 1:</label>
+        <select id="region1" name="region1" onchange="updateLocations('location1', 'region1');">
+            <option value="Favorites">Favorites</option>
+            <option value="South Texas">South Texas</option>
+            <option value="East Texas">East Texas</option>
+            <option value="West Texas">West Texas</option>
+            <option value="Midwest">Midwest</option>
+            <option value="Midcontinent">Midcontinent</option>
+            <option value="North Louisiana">North Louisiana</option>
+            <option value="South Louisiana">South Louisiana</option>
+            <option value="Southeast">Southeast</option>
+            <option value="Appalachia">Appalachia</option>
+            <option value="Northeast">Northeast</option>
+            <option value="Rockies">Rockies</option>
+            <option value="Arizona/Nevada">Arizona/Nevada</option>
+            <option value="California">California</option>
+            <option value="Canada">Canada</option>
+        </select>
+        <br>
+
+        <label for="location1">Location 1:</label>
+        <select id="location1" name="location1"></select>
+        <br>
+
+        <label for="region2">Region 2:</label>
+        <select id="region2" name="region2" onchange="updateLocations('location2', 'region2');">
+            <option value="Favorites">Favorites</option>
+            <option value="South Texas">South Texas</option>
+            <option value="East Texas">East Texas</option>
+            <option value="West Texas">West Texas</option>
+            <option value="Midwest">Midwest</option>
+            <option value="Midcontinent">Midcontinent</option>
+            <option value="North Louisiana">North Louisiana</option>
+            <option value="South Louisiana">South Louisiana</option>
+            <option value="Southeast">Southeast</option>
+            <option value="Appalachia">Appalachia</option>
+            <option value="Northeast">Northeast</option>
+            <option value="Rockies">Rockies</option>
+            <option value="Arizona/Nevada">Arizona/Nevada</option>
+            <option value="California">California</option>
+            <option value="Canada">Canada</option>
+        </select>
+        <br>
+
+        <label for="location2">Location 2:</label>
+        <select id="location2" name="location2"></select>
+        <br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Query Results</h2>
+    <button onclick="copyTableToClipboard()">Copy to Clipboard</button>
+    <div id="chartContainer" style="width: 600px; height: 400px;"></div>
+    <div id="resultsContainer">Please submit the form to view results.</div>
+</body>
+</html>
