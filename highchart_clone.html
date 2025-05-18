@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECharts LME Copper Style</title>
+    <!-- ECharts CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .chart-container {
+            background-color: #fff;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .controls .left-controls select {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .controls .right-controls button {
+            padding: 6px 12px;
+            margin-left: 8px;
+            border: 1px solid #ccc;
+            background-color: #f8f8f8;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .controls .right-controls button:hover {
+            background-color: #e9e9e9;
+        }
+        .chart-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .time-range-buttons button {
+            padding: 5px 10px;
+            margin-right: 5px;
+            border: 1px solid #ccc;
+            background-color: #f0f0f0;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .time-range-buttons button.active {
+            background-color: #e0e0e0;
+            font-weight: bold;
+            border-color: #bbb;
+        }
+        #lmeChart {
+            width: 100%;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chart-container">
+        <div class="controls">
+            <div class="left-controls">
+                <select>
+                    <option>Base metals: Copper</option>
+                    <option>Base metals: Aluminum</option>
+                    <option>Base metals: Zinc</option>
+                </select>
+            </div>
+            <div class="right-controls">
+                <button>+ Add to workspace</button>
+                <button>⇆ Compare</button>
+            </div>
+        </div>
+
+        <div class="chart-title">LME 3 month copper</div>
+
+        <div class="time-range-buttons">
+            <button data-range="1M">1M</button>
+            <button data-range="3M">3M</button>
+            <button data-range="6M">6M</button>
+            <button data-range="1Y" class="active">1Y</button>
+            <button data-range="5Y">5Y</button>
+        </div>
+
+        <div id="lmeChart"></div>
+    </div>
+
+    <script>
+        // 1. Initialize ECharts instance
+        const chartDom = document.getElementById('lmeChart');
+        const myChart = echarts.init(chartDom);
+        let option;
+
+        // 2. Generate Dummy Data
+        let fullData = [];
+        const basePrice = 9000;
+        const today = new Date();
+        const fiveYearsAgo = new Date();
+        fiveYearsAgo.setFullYear(today.getFullYear() - 5);
+
+        let currentDate = new Date(fiveYearsAgo);
+        while (currentDate <= today) {
+            const fluctuation = (Math.random() - 0.5) * 300 + (Math.sin(currentDate.getTime() / (1000 * 60 * 60 * 24 * 30)) * 500); // Sin wave for some trend
+            const price = basePrice + fluctuation + (currentDate.getTime() - fiveYearsAgo.getTime()) / (1000 * 60 * 60 * 24 * 10); // Gradual increase
+            fullData.push([
+                currentDate.getTime(), // Timestamp for ECharts
+                parseFloat(price.toFixed(2))
+            ]);
+            currentDate.setDate(currentDate.getDate() + 1); // Next day
+        }
+
+        // 3. Chart Configuration
+        option = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'cross', // Shows crosshair
+                    label: {
+                        backgroundColor: '#6a7985'
+                    }
+                },
+                formatter: function (params) {
+                    const param = params[0];
+                    const date = new Date(param.axisValue);
+                    const formattedDate = echarts.format.formatTime('dd MMM yy', date);
+                    return `${formattedDate}<br/>` +
+                           `<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:${param.color};"></span>` +
+                           `— ${param.value[1].toFixed(2)} USD/mt`;
+                }
+            },
+            legend: {
+                data: ['LME Copper 3 Month Official Price'],
+                bottom: 10,
+                itemStyle: {
+                    color: '#5470C6'
+                }
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '10%',
+                containLabel: true
+            },
+            xAxis: {
+                type: 'time',
+                boundaryGap: false,
+                axisLabel: {
+                    formatter: function (value) {
+                        return echarts.format.formatTime('dd MMM', value);
+                    }
+                }
+            },
+            yAxis: {
+                type: 'value',
+                name: 'USD/mt',
+                nameLocation: 'end',
+                nameTextStyle: {
+                    align: 'left',
+                    verticalAlign: 'bottom',
+                    padding: [0, 0, 10, 0]
+                },
+                axisLabel: {
+                    formatter: function (value) {
+                        return value.toLocaleString();
+                    }
+                },
+                scale: true
+            },
+            series: [
+                {
+                    name: 'LME Copper 3 Month Official Price',
+                    type: 'line',
+                    smooth: false,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    showSymbol: false,
+                    emphasis: {
+                        focus: 'series',
+                    },
+                    lineStyle: {
+                        width: 2
+                    },
+                    itemStyle: {
+                        color: '#5470C6'
+                    },
+                    areaStyle: null,
+                    data: [] // Data will be populated by updateChartData
+                }
+            ]
+        };
+
+        // 4. Function to update chart data based on range
+        function updateChartData(range) {
+            let startDate = new Date(fullData[fullData.length - 1][0]);
+            const endDate = new Date(startDate);
+
+            switch (range) {
+                case '1M':
+                    startDate.setMonth(startDate.getMonth() - 1);
+                    break;
+                case '3M':
+                    startDate.setMonth(startDate.getMonth() - 3);
+                    break;
+                case '6M':
+                    startDate.setMonth(startDate.getMonth() - 6);
+                    break;
+                case '1Y':
+                    startDate.setFullYear(startDate.getFullYear() - 1);
+                    break;
+                case '5Y':
+                    startDate.setFullYear(startDate.getFullYear() - 5);
+                    break;
+                default:
+                    startDate.setFullYear(startDate.getFullYear() - 1);
+            }
+            
+            const firstDataPointDate = new Date(fullData[0][0]);
+            if (startDate < firstDataPointDate) {
+                startDate = firstDataPointDate;
+            }
+
+            const filteredData = fullData.filter(item => {
+                const itemDate = new Date(item[0]);
+                return itemDate >= startDate && itemDate <= endDate;
+            });
+
+            myChart.setOption({
+                series: [{ // This targets the first series (index 0) and updates its data
+                    data: filteredData
+                }],
+                xAxis: { // This targets the first x-axis and updates its min/max
+                    min: startDate.getTime(),
+                    max: endDate.getTime()
+                }
+            });
+        }
+
+        // 5. Event Listeners for time range buttons
+        const rangeButtons = document.querySelectorAll('.time-range-buttons button');
+        rangeButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                rangeButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                updateChartData(this.dataset.range);
+            });
+        });
+
+        // 6. Initial chart render (default to 1Y)
+        // ================== CORRECTED ORDER ==================
+        // FIRST: Apply the full base configuration to establish the chart structure
+        myChart.setOption(option);
+
+        // THEN: Update with initial data and set the correct x-axis range
+        updateChartData('1Y');
+        // =====================================================
+
+
+        // Optional: Resize chart with window
+        window.addEventListener('resize', function() {
+            myChart.resize();
+        });
+
+    </script>
+</body>
+</html>
