@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LME Copper Price Chart</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    
+    .copper-chart-container {
+      background-color: white;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 10px;
+      margin: 10px 0;
+      max-width: 1000px;
+    }
+    
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .range-buttons {
+      display: flex;
+      gap: 4px;
+    }
+    
+    .range-button {
+      border: 1px solid #ccc;
+      background-color: #f8f8f8;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    
+    .range-button.active {
+      background-color: #666;
+      color: white;
+      border-color: #666;
+    }
+    
+    .chart-actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .action-button {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid #ddd;
+      background-color: white;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #666;
+      border-radius: 2px;
+    }
+    
+    .plus-icon {
+      color: green;
+      font-weight: bold;
+    }
+    
+    .compare-icon {
+      color: #666;
+    }
+    
+    #chart-container {
+      width: 100%;
+      height: 400px;
+    }
+    
+    .chart-footer {
+      margin-top: 10px;
+    }
+    
+    .chart-legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .legend-line {
+      display: inline-block;
+      width: 20px;
+      height: 2px;
+      background-color: #0066cc;
+    }
+  </style>
+</head>
+<body>
+  <h1>LME Copper Price Chart</h1>
+  
+  <div class="copper-chart-container">
+    <div class="chart-header">
+      <h3>LME 3 month copper</h3>
+    </div>
+    <div class="chart-header">
+      <div class="range-buttons">
+        <button class="range-button" data-range="1M">1M</button>
+        <button class="range-button active" data-range="3M">3M</button>
+        <button class="range-button" data-range="6M">6M</button>
+        <button class="range-button" data-range="1Y">1Y</button>
+        <button class="range-button" data-range="5Y">5Y</button>
+      </div>
+      <div class="chart-actions">
+        <button class="action-button">
+          <span class="plus-icon">+</span> Add to workspace
+        </button>
+        <button class="action-button">
+          <span class="compare-icon">≡</span> Compare
+        </button>
+      </div>
+    </div>
+    <div id="chart-container"></div>
+    <div class="chart-footer">
+      <div class="chart-legend">
+        <span class="legend-line"></span>
+        <span class="legend-text">LME Copper 3 Month Official Price</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize the chart
+    const chartDom = document.getElementById('chart-container');
+    const myChart = echarts.init(chartDom);
+    let currentTimeRange = '3M';
+    
+    // Generate sample data (in a real app, you'd fetch this)
+    function generateData(days) {
+      const basePrice = 9300;
+      const volatility = 300;
+      const data = [];
+      const now = new Date();
+      
+      for (let i = days; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(now.getDate() - i);
+        
+        // Random walk price simulation with some trends
+        const noise = Math.random() * 2 - 1;
+        const trend = Math.sin(i / 30) * 300;
+        const price = basePrice + trend + noise * volatility;
+        
+        // Add some specific features like the steep drop visible in the image
+        let adjustedPrice = price;
+        
+        // Add a price spike around 1/3 of the data
+        if (i === Math.floor(days * 2/3)) {
+          adjustedPrice = price + 500;
+        }
+        
+        // Add a price drop around 2/3 of the data
+        if (i === Math.floor(days * 1/3)) {
+          adjustedPrice = price - 800;
+        }
+        
+        data.push([
+          date.toISOString().split('T')[0],
+          parseFloat(adjustedPrice.toFixed(2))
+        ]);
+      }
+      
+      return data;
+    }
+    
+    // Map timeRange to number of days
+    function getDaysFromRange(range) {
+      switch (range) {
+        case '1M': return 30;
+        case '3M': return 90;
+        case '6M': return 180;
+        case '1Y': return 365;
+        case '5Y': return 365 * 5;
+        default: return 90;
+      }
+    }
+    
+    // Update the chart with new data based on time range
+    function updateChart(timeRange) {
+      const days = getDaysFromRange(timeRange);
+      const data = generateData(days);
+      
+      const option = {
+        tooltip: {
+          trigger: 'axis',
+          formatter: function (params) {
+            const date = new Date(params[0].value[0]);
+            const day = date.getDate();
+            const month = date.toLocaleString('default', { month: 'short' });
+            const year = date.getFullYear();
+            const price = params[0].value[1];
+            return `${day} ${month} ${year}<br/>${price.toFixed(2)} USD/mt`;
+          },
+          backgroundColor: '#333',
+          borderWidth: 0,
+          textStyle: {
+            color: '#fff'
+          },
+          axisPointer: {
+            type: 'line',
+            lineStyle: {
+              color: '#666',
+              width: 1
+            }
+          }
+        },
+        grid: {
+          left: '40px',
+          right: '20px',
+          top: '20px',
+          bottom: '40px'
+        },
+        xAxis: {
+          type: 'category',
+          data: data.map(item => item[0]),
+          boundaryGap: false,
+          axisLine: {
+            lineStyle: {
+              color: '#ccc'
+            }
+          },
+          axisLabel: {
+            formatter: function (value) {
+              const date = new Date(value);
+              const day = date.getDate();
+              const month = date.toLocaleString('default', { month: 'short' });
+              return `${day} ${month}`;
+            },
+            color: '#666'
+          },
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#eee',
+              type: 'solid'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'USD/mt',
+          nameLocation: 'end',
+          nameGap: 5,
+          nameTextStyle: {
+            color: '#666',
+            align: 'right'
+          },
+          min: function (value) {
+            return Math.floor(value.min / 250) * 250;
+          },
+          max: function (value) {
+            return Math.ceil(value.max / 250) * 250;
+          },
+          interval: 250,
+          axisLine: {
+            show: false
+          },
+          axisLabel: {
+            color: '#666',
+            formatter: '{value}'
+          },
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#eee',
+              type: 'solid'
+            }
+          }
+        },
+        series: [
+          {
+            name: 'LME Copper 3 Month Official Price',
+            type: 'line',
+            data: data,
+            symbol: 'none',
+            lineStyle: {
+              color: '#0066cc',
+              width: 2
+            },
+            markPoint: {
+              data: [
+                { type: 'max', name: 'Max', symbolSize: 0, label: { show: false } },
+                { type: 'min', name: 'Min', symbolSize: 0, label: { show: false } }
+              ]
+            }
+          }
+        ],
+        toolbox: {
+          feature: {
+            saveAsImage: {
+              title: 'Save',
+              name: 'LME_Copper_Chart'
+            }
+          },
+          right: 10,
+          top: 0
+        }
+      };
+      
+      myChart.setOption(option);
+    }
+    
+    // Initialize the chart with default time range
+    updateChart(currentTimeRange);
+    
+    // Add event listeners to range buttons
+    const rangeButtons = document.querySelectorAll('.range-button');
+    rangeButtons.forEach(button => {
+      button.addEventListener('click', function() {
+        // Remove active class from all buttons
+        rangeButtons.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to clicked button
+        this.classList.add('active');
+        
+        // Update time range and refresh chart
+        currentTimeRange = this.getAttribute('data-range');
+        updateChart(currentTimeRange);
+      });
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+      myChart.resize();
+    });
+    
+    // Add demo functionality to the action buttons
+    const actionButtons = document.querySelectorAll('.action-button');
+    actionButtons.forEach(button => {
+      button.addEventListener('click', function() {
+        alert('This is a demo - action button clicked');
+      });
+    });
+  </script>
+</body>
+</html>
